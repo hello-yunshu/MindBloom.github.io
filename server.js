@@ -33,30 +33,6 @@ const dbConfig = {
   database: process.env.DB_NAME || 'mindbloom'
 };
 
-// 先创建一个无数据库连接，用于创建数据库
-const createDbPool = mysql.createPool({
-  host: dbConfig.host,
-  port: dbConfig.port,
-  user: dbConfig.user,
-  password: dbConfig.password,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
-
-// 创建数据库
-async function createDatabase() {
-  try {
-    const connection = await createDbPool.getConnection();
-    await connection.execute(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
-    console.log(`✅ 数据库 ${dbConfig.database} 已创建或已存在`);
-    connection.release();
-  } catch (error) {
-    console.error('❌ 创建数据库失败:', error.message);
-    process.exit(1);
-  }
-}
-
 // 创建数据库连接池
 const pool = mysql.createPool({
   ...dbConfig,
@@ -65,81 +41,169 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
-// 自动创建数据库表
-async function createTables() {
+// 数据库迁移管理
+async function manageDatabaseSchema() {
   try {
     const connection = await pool.getConnection();
     
-    // 创建用户表
+    // 1. 创建版本表（用于跟踪数据库结构版本）
     await connection.execute(`
-      CREATE TABLE IF NOT EXISTS users (
+      CREATE TABLE IF NOT EXISTS schema_versions (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(255) NOT NULL UNIQUE,
-        password VARCHAR(255) NOT NULL,
+        table_name VARCHAR(50) NOT NULL UNIQUE,
+        version INT NOT NULL DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
     
-    // 创建情绪数据表
-    await connection.execute(`
-      CREATE TABLE IF NOT EXISTS mood_data (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        date DATETIME NOT NULL,
-        anxiety INT NOT NULL CHECK (anxiety BETWEEN 1 AND 10),
-        joy INT NOT NULL CHECK (joy BETWEEN 1 AND 10),
-        date_key VARCHAR(10) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_date_key (date_key),
-        INDEX idx_date (date)
-      )
-    `);
+    // 2. 定义表结构（包含版本信息）
+    const tableSchemas = [
+      {
+        name: 'users',
+        version: 1,
+        sql: `CREATE TABLE IF NOT EXISTS users (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          username VARCHAR(255) NOT NULL UNIQUE,
+          password VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )`
+      },
+      {
+        name: 'mood_data',
+        version: 1,
+        sql: `CREATE TABLE IF NOT EXISTS mood_data (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          date DATETIME NOT NULL,
+          anxiety INT NOT NULL CHECK (anxiety BETWEEN 1 AND 10),
+          joy INT NOT NULL CHECK (joy BETWEEN 1 AND 10),
+          date_key VARCHAR(10) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_date_key (date_key),
+          INDEX idx_date (date)
+        )`
+      },
+      {
+        name: 'task_data',
+        version: 1,
+        sql: `CREATE TABLE IF NOT EXISTS task_data (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          date VARCHAR(10) NOT NULL,
+          completed INT NOT NULL DEFAULT 0,
+          total INT NOT NULL DEFAULT 0,
+          completion_rate INT NOT NULL DEFAULT 0 CHECK (completion_rate BETWEEN 0 AND 100),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY uk_date (date)
+        )`
+      },
+      {
+        name: 'ai_suggestions',
+        version: 1,
+        sql: `CREATE TABLE IF NOT EXISTS ai_suggestions (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          content TEXT NOT NULL,
+          date DATETIME NOT NULL,
+          metrics JSON NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_date (date)
+        )`
+      },
+      {
+        name: 'quotes',
+        version: 1,
+        sql: `CREATE TABLE IF NOT EXISTS quotes (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          text TEXT NOT NULL,
+          date DATETIME NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_date (date)
+        )`
+      }
+    ];
     
-    // 创建任务数据表
-    await connection.execute(`
-      CREATE TABLE IF NOT EXISTS task_data (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        date VARCHAR(10) NOT NULL,
-        completed INT NOT NULL DEFAULT 0,
-        total INT NOT NULL DEFAULT 0,
-        completion_rate INT NOT NULL DEFAULT 0 CHECK (completion_rate BETWEEN 0 AND 100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY uk_date (date)
-      )
-    `);
+    // 3. 表结构管理主逻辑
+    for (const schema of tableSchemas) {
+      // 检查表是否存在
+      const [tableExists] = await connection.execute(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name = ?`,
+        [dbConfig.database, schema.name]
+      );
+      
+      if (tableExists.length === 0) {
+        // 表不存在，创建表
+        await connection.execute(schema.sql);
+        console.log(`✅ 新建表: ${schema.name} (版本: ${schema.version})`);
+        
+        // 插入版本记录
+        await connection.execute(
+          `INSERT INTO schema_versions (table_name, version) VALUES (?, ?)`,
+          [schema.name, schema.version]
+        );
+      } else {
+        // 表存在，检查版本
+        const [versionResult] = await connection.execute(
+          `SELECT version FROM schema_versions WHERE table_name = ?`,
+          [schema.name]
+        );
+        
+        if (versionResult.length === 0) {
+          // 没有版本记录，插入当前版本
+          await connection.execute(
+            `INSERT INTO schema_versions (table_name, version) VALUES (?, ?)`,
+            [schema.name, schema.version]
+          );
+          console.log(`✅ 为表 ${schema.name} 添加版本记录 (版本: ${schema.version})`);
+        } else {
+          const currentVersion = versionResult[0].version;
+          if (currentVersion < schema.version) {
+            // 版本需要升级
+            console.log(`🔄 表 ${schema.name} 需要升级: ${currentVersion} -> ${schema.version}`);
+            
+            // 执行升级前备份表
+            const backupTableName = `${schema.name}_backup_${Date.now()}`;
+            await connection.execute(
+              `CREATE TABLE ${backupTableName} LIKE ${schema.name}`
+            );
+            await connection.execute(
+              `INSERT INTO ${backupTableName} SELECT * FROM ${schema.name}`
+            );
+            console.log(`📦 已备份表 ${schema.name} 到 ${backupTableName}`);
+            
+            // 在这里添加具体的升级逻辑（根据不同表和版本）
+            // 示例：如果是users表从版本1升级到2
+            // if (schema.name === 'users' && currentVersion === 1 && schema.version === 2) {
+            //   await connection.execute(`ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL`);
+            // }
+            
+            // 更新版本记录
+            await connection.execute(
+              `UPDATE schema_versions SET version = ? WHERE table_name = ?`,
+              [schema.version, schema.name]
+            );
+            console.log(`✅ 表 ${schema.name} 升级完成: ${currentVersion} -> ${schema.version}`);
+          } else if (currentVersion === schema.version) {
+            console.log(`✅ 表 ${schema.name} 版本已最新 (版本: ${schema.version})`);
+          } else {
+            console.log(`⚠️  表 ${schema.name} 版本异常: 当前版本 ${currentVersion} 高于定义版本 ${schema.version}`);
+          }
+        }
+      }
+      
+      // 4. 执行表结构优化（确保索引和约束正确）
+      console.log(`🔧 优化表结构: ${schema.name}`);
+      await connection.execute(`OPTIMIZE TABLE ${schema.name}`);
+    }
     
-    // 创建AI建议表
-    await connection.execute(`
-      CREATE TABLE IF NOT EXISTS ai_suggestions (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        content TEXT NOT NULL,
-        date DATETIME NOT NULL,
-        metrics JSON NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_date (date)
-      )
-    `);
-    
-    // 创建引用数据表
-    await connection.execute(`
-      CREATE TABLE IF NOT EXISTS quotes (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        text TEXT NOT NULL,
-        date DATETIME NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_date (date)
-      )
-    `);
-    
-    console.log('✅ 所有数据库表已创建或已存在');
+    console.log('✅ 数据库表结构管理完成');
     connection.release();
   } catch (error) {
-    console.error('❌ 创建数据库表失败:', error.message);
+    console.error('❌ 数据库表结构管理失败:', error.message);
     process.exit(1);
   }
 }
@@ -188,8 +252,7 @@ async function insertInitialData() {
 // 初始化数据库
 async function initDatabase() {
   try {
-    await createDatabase();
-    await createTables();
+    await manageDatabaseSchema();
     await insertInitialData();
     console.log('✅ 数据库初始化完成');
   } catch (error) {

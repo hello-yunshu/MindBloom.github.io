@@ -65,23 +65,35 @@ cd MindBloom.github.io
 npm install
 ```
 
-#### 3. 配置环境变量
+#### 3. 创建数据库
 
-复制 `.env` 文件并根据需要修改配置：
+在MySQL中创建一个数据库，配置如下：
+- **数据库名称**: `mindbloom`
+- **字符集**: `utf8mb4`
+- **排序规则**: `utf8mb4_unicode_ci`
+
+确保您有一个具有该数据库访问权限的MySQL用户。
+
+#### 4. 配置环境变量
+
+直接编辑 `.env` 文件，配置以下关键参数：
 
 ```bash
-# 复制示例环境变量文件
-cp .env .env.local
+# 编辑环境变量文件
+# 可以使用任何文本编辑器，例如：
+# Windows: notepad .env
+# macOS: open -e .env
+# Linux: nano .env
 ```
 
-编辑 `.env.local` 文件，配置以下关键参数：
+配置以下关键参数：
 
 - **数据库配置**
   - `DB_HOST`: 数据库主机地址（默认：localhost）
   - `DB_PORT`: 数据库端口（默认：3306）
-  - `DB_USER`: 数据库用户名（默认：root）
-  - `DB_PASSWORD`: 数据库密码（必填，需要修改）
-  - `DB_NAME`: 数据库名称（默认：mindbloom）
+  - `DB_USER`: 具有数据库访问权限的用户名
+  - `DB_PASSWORD`: 数据库密码
+  - `DB_NAME`: 数据库名称（必须与创建的数据库名称一致，默认：mindbloom）
 
 - **应用配置**
   - `DEFAULT_USERNAME`: 默认用户名（默认：admin）
@@ -89,14 +101,6 @@ cp .env .env.local
 
 - **AI配置（可选）**
   - `QWEN_API_KEY`: Qwen API密钥（可选，不配置则使用模拟AI）
-
-- **定时任务配置**
-  - `SCHEDULE_TIME`: 每日AI内容生成时间（默认：23:00）
-
-#### 4. 启动MySQL数据库
-
-确保MySQL服务已经启动。如果尚未安装MySQL，可以参考以下链接安装：
-- [MySQL安装指南](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
 #### 5. 启动后端服务器
 
