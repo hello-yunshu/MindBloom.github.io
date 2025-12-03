@@ -288,12 +288,12 @@ app.get('/api/data', async (req, res) => {
     
     // 获取最后更新时间
     const [lastUpdatedResult] = await pool.execute(
-      'SELECT MAX(updated_at) as lastUpdated FROM (
+      `SELECT MAX(updated_at) as lastUpdated FROM (
         SELECT updated_at FROM mood_data UNION ALL
         SELECT updated_at FROM task_data UNION ALL
         SELECT updated_at FROM ai_suggestions UNION ALL
         SELECT updated_at FROM quotes
-      ) AS all_tables'
+      ) AS all_tables`
     );
     
     const lastUpdated = lastUpdatedResult[0].lastUpdated || new Date().toISOString();
