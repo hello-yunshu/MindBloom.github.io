@@ -10,6 +10,88 @@ const APP_CONFIG = {
     }
 };
 
+// 自定义弹窗组件
+class CustomAlert {
+    static show(message, type = 'info', duration = 3000, autoClose = true) {
+        // 创建弹窗元素
+        const alertElement = document.createElement('div');
+        alertElement.className = `custom-alert custom-alert-${type}`;
+        
+        alertElement.innerHTML = `
+            <div class="custom-alert-content">
+                <span class="custom-alert-message">${message}</span>
+                <button class="custom-alert-close">
+                    <i class="material-icons">close</i>
+                </button>
+            </div>
+        `;
+        
+        // 添加到页面
+        document.body.appendChild(alertElement);
+        
+        // 添加动画类
+        setTimeout(() => {
+            alertElement.classList.add('custom-alert-show');
+        }, 10);
+        
+        // 添加关闭按钮事件
+        const closeBtn = alertElement.querySelector('.custom-alert-close');
+        closeBtn.addEventListener('click', () => {
+            CustomAlert.hide(alertElement);
+        });
+        
+        // 自动关闭（如果autoClose为true）
+        if (autoClose) {
+            setTimeout(() => {
+                CustomAlert.hide(alertElement);
+            }, duration);
+        }
+    }
+    
+    static hide(alertElement) {
+        alertElement.classList.remove('custom-alert-show');
+        setTimeout(() => {
+            if (alertElement.parentNode) {
+                alertElement.parentNode.removeChild(alertElement);
+            }
+        }, 300);
+    }
+    
+    // 便捷方法
+    static success(message, duration = 3000, autoClose = true) {
+        this.show(message, 'success', duration, autoClose);
+    }
+    
+    static error(message, duration = 5000, autoClose = true) {
+        this.show(message, 'error', duration, autoClose);
+    }
+    
+    static warning(message, duration = 4000, autoClose = true) {
+        this.show(message, 'warning', duration, autoClose);
+    }
+    
+    static info(message, duration = 3000, autoClose = true) {
+        this.show(message, 'info', duration, autoClose);
+    }
+    
+    // 便捷方法：手动关闭模式（用于重要操作反馈）
+    static successManual(message) {
+        this.show(message, 'success', 0, false);
+    }
+    
+    static errorManual(message) {
+        this.show(message, 'error', 0, false);
+    }
+    
+    static warningManual(message) {
+        this.show(message, 'warning', 0, false);
+    }
+    
+    static infoManual(message) {
+        this.show(message, 'info', 0, false);
+    }
+}
+
 // 用户认证管理
 class AuthManager {
     static isLoggedIn() {
@@ -271,7 +353,7 @@ class MindBloomApp {
         this.setupMoodTracking();
         this.initCompletionRate();
         this.loadAISuggestions();
-        this.loadRandomQuote();
+        this.generateAIQuote();
     }
 
     showLogin() {
@@ -317,7 +399,7 @@ class MindBloomApp {
                 if (success) {
                     location.reload();
                 } else {
-                    alert('用户名或密码错误，请重试！');
+                    CustomAlert.errorManual('用户名或密码错误，请重试！');
                 }
             }
         });
@@ -338,6 +420,28 @@ class MindBloomApp {
         // 监听系统主题变化
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
         
+        // 控制用户设置卡片的显示
+        const userSettingsCard = document.querySelector('.card:nth-child(3)');
+        if (userSettingsCard) {
+            if (AuthManager.isLoggedIn()) {
+                userSettingsCard.style.display = 'block';
+            } else {
+                userSettingsCard.style.display = 'none';
+            }
+        }
+        
+        // 添加登录按钮（仅未登录时显示）
+        if (!AuthManager.isLoggedIn()) {
+            const loginBtn = document.createElement('button');
+            loginBtn.className = 'mdl-button mdl-js-button mdl-button--raised mdl-button--accent login-btn';
+            loginBtn.innerHTML = '<i class="material-icons">login</i> 登录';
+            loginBtn.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 1000;';
+            loginBtn.addEventListener('click', () => {
+                this.showLogin();
+            });
+            document.body.appendChild(loginBtn);
+        }
+        
         // 数据导出按钮
         const exportBtn = document.createElement('button');
         exportBtn.className = 'export-btn';
@@ -353,21 +457,21 @@ class MindBloomApp {
         syncBtn.addEventListener('click', async () => {
             const success = await DataManager.syncFromCloud();
             if (success) {
-                alert('数据同步成功！');
+                CustomAlert.success('数据同步成功！');
                 location.reload(); // 刷新页面以显示最新数据
             } else {
-                alert('数据同步失败，请稍后重试。');
+                CustomAlert.error('数据同步失败，请稍后重试。');
             }
         });
         
         // 添加数据导出和同步按钮到用户设置卡片
-        const userSettingsCard = document.querySelector('.card:nth-child(3) .card-content');
-        if (userSettingsCard) {
+        const userSettingsCardContent = document.querySelector('.card:nth-child(3) .card-content');
+        if (userSettingsCardContent) {
             const buttonContainer = document.createElement('div');
             buttonContainer.style.cssText = 'display: flex; gap: var(--spacing-md); margin-top: var(--spacing-lg); flex-wrap: wrap;';
             buttonContainer.appendChild(exportBtn);
             buttonContainer.appendChild(syncBtn);
-            userSettingsCard.appendChild(buttonContainer);
+            userSettingsCardContent.appendChild(buttonContainer);
         };
         
         // 用户设置表单事件监听
@@ -388,24 +492,24 @@ class MindBloomApp {
                 
                 // 验证密码
                 if (newPassword !== confirmPassword) {
-                    alert('两次输入的密码不一致，请重新输入！');
+                    CustomAlert.warningManual('两次输入的密码不一致，请重新输入！');
                     return;
                 }
                 
                 // 验证用户名和密码不为空
                 if (!newUsername || !newPassword) {
-                    alert('用户名和密码不能为空！');
+                    CustomAlert.errorManual('用户名和密码不能为空！');
                     return;
                 }
                 
                 // 更新用户信息
                 const success = await AuthManager.updateUser(newUsername, newPassword);
                 if (success) {
-                    alert('用户信息更新成功！请重新登录。');
+                    CustomAlert.successManual('用户信息更新成功！请重新登录。');
                     AuthManager.logout();
                     location.reload();
                 } else {
-                    alert('用户信息更新失败，请稍后重试。');
+                    CustomAlert.errorManual('用户信息更新失败，请稍后重试。');
                 }
             });
         }
@@ -576,7 +680,7 @@ class MindBloomApp {
             };
             
             await DataManager.saveMoodData(moodData);
-            alert('今日状态已保存！');
+            CustomAlert.success('今日状态已保存！');
             
             this.updateCompletionRate();
             this.updateStreak();
@@ -651,14 +755,25 @@ class MindBloomApp {
         if (suggestions.length === 0) {
             aiContainer.innerHTML += `
                 <div class="ai-suggestion-item">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <strong>📝 AI建议</strong>
+                        <button class="mdl-button mdl-js-button mdl-button--icon close-ai-suggestion">
+                            <i class="material-icons">close</i>
+                        </button>
+                    </div>
                     <p>还没有AI建议，系统将在每周自动生成。</p>
                 </div>
             `;
         } else {
-            suggestions.forEach(suggestion => {
+            suggestions.forEach((suggestion, index) => {
                 aiContainer.innerHTML += `
-                    <div class="ai-suggestion-item">
-                        <strong>${suggestion.title}</strong>
+                    <div class="ai-suggestion-item" id="ai-suggestion-${index}">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <strong>${suggestion.title}</strong>
+                            <button class="mdl-button mdl-js-button mdl-button--icon close-ai-suggestion" data-id="${index}">
+                                <i class="material-icons">close</i>
+                            </button>
+                        </div>
                         <p>${suggestion.content}</p>
                         <small>生成时间：${new Date(suggestion.date).toLocaleDateString()}</small>
                     </div>
@@ -677,6 +792,17 @@ class MindBloomApp {
                 this.generateAISuggestions();
             });
         }
+        
+        // 添加关闭按钮事件监听
+        const closeBtns = aiContainer.querySelectorAll('.close-ai-suggestion');
+        closeBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const suggestionItem = e.target.closest('.ai-suggestion-item');
+                if (suggestionItem) {
+                    suggestionItem.style.display = 'none';
+                }
+            });
+        });
         
         // 检查是否需要自动生成新的建议（每周一次）
         this.checkForAutoAISuggestions();
@@ -711,11 +837,11 @@ class MindBloomApp {
                 }
                 this.loadAISuggestions();
                 
-                alert('AI建议已更新！');
+                CustomAlert.success('AI建议已更新！');
             }
         } catch (error) {
             console.error('生成AI建议失败:', error);
-            alert('生成AI建议失败，请稍后重试。');
+            CustomAlert.error('生成AI建议失败，请稍后重试。');
         }
     }
     
@@ -743,6 +869,46 @@ class MindBloomApp {
         }
     }
 
+    // 生成并显示AI建议文字
+    async generateAIQuote() {
+        try {
+            // 调用后端API生成AI建议文字
+            const response = await fetch(`${APP_CONFIG.API_URL}/api/generate-ai-quote`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    const aiQuote = result.quote;
+                    const quoteElement = document.querySelector('.quote-text');
+                    if (quoteElement) {
+                        quoteElement.textContent = `"${aiQuote}"`;
+                    }
+                    
+                    // 保存到本地存储
+                    DataManager.saveQuote({
+                        text: aiQuote,
+                        date: new Date().toISOString(),
+                        isAI: true
+                    });
+                    return;
+                }
+            }
+            
+            // 如果API调用失败，使用随机引用
+            this.loadRandomQuote();
+        } catch (error) {
+            console.error('生成AI引用失败:', error);
+            // 发生错误时使用随机引用
+            this.loadRandomQuote();
+        }
+    }
+    
+    // 加载随机引用（作为备用方案）
     loadRandomQuote() {
         // 随机生成或加载引用
         const quotes = [
@@ -765,7 +931,8 @@ class MindBloomApp {
         // 保存到本地存储
         DataManager.saveQuote({
             text: randomQuote,
-            date: new Date().toISOString()
+            date: new Date().toISOString(),
+            isAI: false
         });
     }
 }

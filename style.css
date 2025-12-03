@@ -436,9 +436,59 @@ body {
 
 .tasks-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: var(--spacing-lg);
-    margin-top: var(--spacing-lg);
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-xl);
+    margin-top: var(--spacing-xl);
+}
+
+/* 优化每日学习指导卡片的排版 */
+.card:nth-child(5) .card-content {
+    padding: var(--spacing-2xl);
+}
+
+/* 优化引用框样式 */
+.quote-box {
+    margin: var(--spacing-2xl) auto;
+    max-width: 800px;
+    background: linear-gradient(135deg, var(--tertiary-color), var(--tertiary-dark));
+    box-shadow: var(--shadow-xl);
+    transition: var(--transition);
+}
+
+.quote-box:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+
+/* 优化任务类别标题 */
+.task-category-title {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    color: white;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--border-radius-lg);
+    margin: -var(--spacing-lg) -var(--spacing-lg) var(--spacing-lg) -var(--spacing-lg);
+    text-align: center;
+    font-size: var(--font-size-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+/* 优化任务项间距 */
+.task-item {
+    margin-bottom: var(--spacing-lg);
+    background: white;
+    box-shadow: var(--shadow-sm);
+}
+
+/* 优化任务标题和描述的间距 */
+.task-title {
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-md);
+}
+
+.task-description {
+    font-size: var(--font-size-sm);
+    line-height: 1.8;
+    color: var(--on-surface-variant);
 }
 
 .task-category {
@@ -1039,4 +1089,98 @@ footer {
 
 .export-btn:hover {
     background-color: #018786;
+}
+
+/* 自定义弹窗样式 */
+.custom-alert {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    min-width: 250px;
+    max-width: 400px;
+    background: white;
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 10000;
+    transform: translateX(100%);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-left: 4px solid var(--primary-color);
+}
+
+.custom-alert-show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.custom-alert-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.custom-alert-message {
+    flex: 1;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--on-surface);
+    margin-right: var(--spacing-md);
+    line-height: 1.5;
+}
+
+.custom-alert-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--spacing-xs);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.custom-alert-close:hover {
+    background: var(--surface-variant);
+}
+
+.custom-alert-close i {
+    font-size: var(--font-size-sm);
+    color: var(--on-surface-variant);
+}
+
+/* 不同类型的弹窗样式 */
+.custom-alert-success {
+    border-left-color: var(--secondary-color);
+    background: linear-gradient(135deg, rgba(165, 214, 167, 0.1), white);
+}
+
+.custom-alert-error {
+    border-left-color: var(--error-color);
+    background: linear-gradient(135deg, rgba(239, 154, 154, 0.1), white);
+}
+
+.custom-alert-warning {
+    border-left-color: var(--tertiary-color);
+    background: linear-gradient(135deg, rgba(255, 204, 128, 0.1), white);
+}
+
+.custom-alert-info {
+    border-left-color: var(--primary-color);
+    background: linear-gradient(135deg, rgba(142, 159, 255, 0.1), white);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .custom-alert {
+        left: 20px;
+        right: 20px;
+        max-width: none;
+        transform: translateY(-100%);
+    }
+    
+    .custom-alert-show {
+        transform: translateY(0);
+    }
 }
