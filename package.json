@@ -1,0 +1,32 @@
+{
+  "name": "mindbloom",
+  "version": "1.0.0",
+  "description": "学习心理建设指南，专注于重建学习的快乐",
+  "main": "index.html",
+  "scripts": {
+    "dev": "node server.js",
+    "frontend-dev": "python -m http.server 8000",
+    "generate-data": "node generate-data.js",
+    "lint": "npx eslint . --ext .js,.html",
+    "prettier": "npx prettier --write ."
+  },
+  "keywords": [
+    "learning",
+    "mental-health",
+    "productivity",
+    "mindfulness"
+  ],
+  "author": "MindBloom Team",
+  "license": "MIT",
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.3"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "mysql2": "^3.11.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3"
+  }
+}
