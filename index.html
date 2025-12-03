@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学习心理建设指南</title>
+    <!-- Material Design Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Material Design Lite CSS -->
+    <link rel="stylesheet" href="https://code.getmdl.io/1.3.0/material.indigo-pink.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="header-content">
+                <h1>🌟 学习心理建设指南</h1>
+                <div class="date-display" id="current-date">2025年12月3日 星期三</div>
+            </div>
+        </header>
+        
+        <main class="main-content">
+            <!-- 状态追踪卡片 -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">show_chart</i>
+                    <span>今日状态追踪</span>
+                </div>
+                <div class="card-content">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">焦虑程度</div>
+                            <div class="stat-value" id="anxiety-level">-</div>
+                            <div class="stat-label">当前状态</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">愉悦程度</div>
+                            <div class="stat-value" id="joy-level">-</div>
+                            <div class="stat-label">当前状态</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">任务完成率</div>
+                            <div class="stat-value" id="completion-rate">0%</div>
+                            <div class="stat-label">今日目标</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">连续天数</div>
+                            <div class="stat-value" id="streak-count">0</div>
+                            <div class="stat-label">良好记录</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            <span>焦虑程度: <span id="anxiety-display">-</span></span>
+                            <span>愉悦程度: <span id="joy-display">-</span></span>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                            <input type="range" min="1" max="10" value="5" class="mdl-slider mdl-js-slider" id="anxiety-slider" style="flex: 1;">
+                            <input type="range" min="1" max="10" value="5" class="mdl-slider mdl-js-slider" id="joy-slider" style="flex: 1;">
+                        </div>
+                        <button class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored" id="save-mood">
+                            保存今日状态
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 数据统计卡片 -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">bar_chart</i>
+                    <span>学习状态统计</span>
+                </div>
+                <div class="card-content">
+                    <div class="tabs">
+                        <div class="tab active" data-tab="weekly">周统计</div>
+                        <div class="tab" data-tab="monthly">月统计</div>
+                    </div>
+                    
+                    <div class="tab-content active" id="weekly-tab">
+                        <div class="chart-container">
+                            <canvas id="weekly-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" id="monthly-tab">
+                        <div class="chart-container">
+                            <canvas id="monthly-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 用户设置卡片 -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">settings</i>
+                    <span>用户设置</span>
+                </div>
+                <div class="card-content">
+                    <div class="user-settings">
+                        <h3>账户设置</h3>
+                        <form id="user-settings-form">
+                            <div class="form-group">
+                                <label for="new-username">新用户名</label>
+                                <input type="text" id="new-username" placeholder="请输入新用户名" class="mdl-textfield__input">
+                            </div>
+                            <div class="form-group">
+                                <label for="new-password">新密码</label>
+                                <input type="password" id="new-password" placeholder="请输入新密码" class="mdl-textfield__input">
+                            </div>
+                            <div class="form-group">
+                                <label for="confirm-password">确认密码</label>
+                                <input type="password" id="confirm-password" placeholder="请确认新密码" class="mdl-textfield__input">
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored">
+                                    保存设置
+                                </button>
+                                <button type="button" class="mdl-button mdl-js-button" id="logout-btn">
+                                    退出登录
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- AI建议板块 -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">smart_toy</i>
+                    <span>AI学习建议</span>
+                </div>
+                <div class="card-content">
+                    <div class="ai-suggestions" id="ai-suggestions">
+                        <div class="ai-suggestion-item">
+                            <strong>📊 本周学习状态分析</strong>
+                            <p>根据您本周的数据，焦虑程度呈现下降趋势，愉悦程度逐渐提升。建议继续保持当前的学习节奏，适当增加休息时间。</p>
+                        </div>
+                        <div class="ai-suggestion-item">
+                            <strong>🎯 个性化建议</strong>
+                            <p>您在上午时段的学习效率较高，建议将重要任务安排在上午进行。同时，建议每天增加10分钟的冥想时间，有助于进一步降低焦虑。</p>
+                        </div>
+                        <div class="ai-suggestion-item">
+                            <strong>💡 学习方法优化</strong>
+                            <p>尝试使用番茄工作法，25分钟学习+5分钟休息的模式可以提高学习效率。另外，建议每天记录学习心得，有助于加深记忆和反思。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 每日任务卡片 -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">checklist</i>
+                    <span>每日学习指导</span>
+                </div>
+                <div class="card-content">
+                    <div class="quote-box">
+                        <div class="quote-text" id="daily-quote">"学习的本质是探索与成长，而非表演与完美。每一步回归真实兴趣的尝试，都是对过去扭曲学习模式的治愈。"</div>
+                        <div class="quote-author">— 学习心理建设指南</div>
+                    </div>
+                    
+                    <div class="tasks-grid">
+                        <!-- 每日核心实践 -->
+                        <div class="task-category">
+                            <div class="task-category-title">
+                                <i class="material-icons">bookmark</i>
+                                <span>📝 每日核心实践 (4项必做)</span>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task1">
+                                        <input type="checkbox" id="task1" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">edit</i>
+                                        <span>📝 保持记录习惯</span>
+                                    </div>
+                                    <div class="task-description">每天花10分钟记录学习感悟和心理变化，不追求完美，只求真实表达</div>
+                                </div>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task2">
+                                        <input type="checkbox" id="task2" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">check_circle</i>
+                                        <span>🧘 践行"允许原则"</span>
+                                    </div>
+                                    <div class="task-description">允许自己分心、休息、进度缓慢。焦虑时提醒自己："这不是惩罚的理由，而是调整的机会。"</div>
+                                </div>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task3">
+                                        <input type="checkbox" id="task3" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">flag</i>
+                                        <span>🎯 实行"小步前进"</span>
+                                    </div>
+                                    <div class="task-description">设定微小目标（如"今天看3页书"），完成后真诚肯定自己，重视质量而非数量</div>
+                                </div>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task4">
+                                        <input type="checkbox" id="task4" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">directions_run</i>
+                                        <span>🏃 身体-大脑联动</span>
+                                    </div>
+                                    <div class="task-description">每学习30分钟，起身活动5-10分钟，通过身体活动释放焦虑，改善大脑状态</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 情境觉察工具 -->
+                        <div class="task-category">
+                            <div class="task-category-title">
+                                <i class="material-icons">visibility</i>
+                                <span>🔍 情境觉察工具 (3项按需使用)</span>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task5">
+                                        <input type="checkbox" id="task5" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">visibility_off</i>
+                                        <span>👀 "表演式学习"</span>
+                                    </div>
+                                    <div class="task-description">关闭或拉开窗帘学习至少一次，体验纯粹为自己而学的感觉</div>
+                                </div>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task6">
+                                        <input type="checkbox" id="task6" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">chat</i>
+                                        <span>📱 "汇报冲动"</span>
+                                    </div>
+                                    <div class="task-description">想向亲人报告进度时，暂停30秒自问："我是为了分享喜悦，还是寻求认可？"</div>
+                                </div>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task7">
+                                        <input type="checkbox" id="task7" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">help_outline</i>
+                                        <span>❓ "兴趣缺失"</span>
+                                    </div>
+                                    <div class="task-description">学习前问自己："我对这部分内容真的感兴趣吗？"若否，允许跳过或找连接点</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 长期成长习惯 -->
+                        <div class="task-category">
+                            <div class="task-category-title">
+                                <i class="material-icons">trending_up</i>
+                                <span>🌱 长期成长习惯 (每周选1-2项)</span>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task8">
+                                        <input type="checkbox" id="task8" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">schedule</i>
+                                        <span>⏰ 个人化学习节奏</span>
+                                    </div>
+                                    <div class="task-description">根据自身状态而非外部标准安排时间，尊重内在节律</div>
+                                </div>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task9">
+                                        <input type="checkbox" id="task9" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">favorite</i>
+                                        <span>❤️ 每周回顾初心</span>
+                                    </div>
+                                    <div class="task-description">每周末花15分钟回顾"我为什么喜欢这个学科"</div>
+                                </div>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task10">
+                                        <input type="checkbox" id="task10" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">lightbulb</i>
+                                        <span>❓ 好奇提问习惯</span>
+                                    </div>
+                                    <div class="task-description">每页至少提出1个真正好奇的问题，只为满足知识渴望</div>
+                                </div>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task11">
+                                        <input type="checkbox" id="task11" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">article</i>
+                                        <span>📝 焦虑转化技巧</span>
+                                    </div>
+                                    <div class="task-description">焦虑时写下："此刻我在害怕什么？这个恐惧有现实依据吗？"</div>
+                                </div>
+                            </div>
+                            
+                            <div class="task-item">
+                                <div class="task-checkbox">
+                                    <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="task12">
+                                        <input type="checkbox" id="task12" class="mdl-checkbox__input">
+                                    </label>
+                                </div>
+                                <div class="task-content">
+                                    <div class="task-title">
+                                        <i class="material-icons">stars</i>
+                                        <span>✨ 庆祝微小胜利</span>
+                                    </div>
+                                    <div class="task-description">每天结束时找出1个比昨天进步的小细节，真诚自我肯定</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <div>学习心理建设指南 © 2025 | 专注于重建学习的快乐</div>
+        </footer>
+    </div>
+
+    <!-- Material Design Lite JS -->
+    <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script>
+    <!-- Custom JavaScript -->
+    <script src="main.js"></script>
+</body>
+</html>
