@@ -8,6 +8,8 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const cron = require('node-cron');
 const bcrypt = require('bcryptjs');
+// 导入node-fetch用于API调用
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 // 定时任务配置
 const scheduleTime = process.env.SCHEDULE_TIME || '23:00';
@@ -773,6 +775,120 @@ app.post('/api/generate-daily-ai', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// 生成AI引用文字
+app.post('/api/generate-ai-quote', async (req, res) => {
+  try {
+    // 获取用户数据
+    const [moodData] = await pool.execute('SELECT anxiety, joy FROM mood_data ORDER BY date DESC LIMIT 7');
+    
+    // 计算统计数据
+    const stats = {
+      avgAnxiety: 0,
+      avgJoy: 0,
+      daysTracked: moodData.length
+    };
+    
+    if (moodData.length > 0) {
+      stats.avgAnxiety = moodData.reduce((sum, item) => sum + item.anxiety, 0) / moodData.length;
+      stats.avgJoy = moodData.reduce((sum, item) => sum + item.joy, 0) / moodData.length;
+    }
+    
+    // 生成AI引用（模拟AI逻辑）
+    const aiQuote = await generateAIQuote(stats);
+    
+    // 保存AI引用到数据库
+    await pool.execute(
+      'INSERT INTO quotes (text, date) VALUES (?, ?)',
+      [
+        aiQuote,
+        toMysqlDatetime(new Date().toISOString())
+      ]
+    );
+    
+    res.json({ success: true, quote: aiQuote });
+  } catch (error) {
+    console.error('生成AI引用失败:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 生成AI引用
+async function generateAIQuote(stats) {
+  try {
+    // 构建提示词
+    const messages = [
+      {
+        role: 'system',
+        content: '你是一个专业的学习心理顾问，专注于帮助用户建立健康的学习习惯和积极的学习心态。'
+      },
+      {
+        role: 'user',
+        content: `
+        请基于以下用户数据，生成一句简洁、鼓励、富有启发的学习心理建设引言：
+        
+        用户数据：
+        - 平均焦虑程度：${stats.avgAnxiety.toFixed(1)}（1-10分，10分为最焦虑）
+        - 平均愉悦程度：${stats.avgJoy.toFixed(1)}（1-10分，10分为最愉悦）
+        - 数据追踪天数：${stats.daysTracked}天
+        
+        引言要求：
+        1. 简洁有力，不超过100字
+        2. 富有启发性和鼓励性
+        3. 符合"学习心理建设指南"的定位
+        4. 语言温暖、积极，容易理解
+        5. 不要使用专业术语
+        6. 直接生成引言内容，不需要任何引言或解释
+        `
+      }
+    ];
+    
+    // 调用Qwen API
+    const response = await fetch(`${process.env.QWEN_API_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.QWEN_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: process.env.QWEN_MODEL || 'qwen3-max-preview',
+        messages: messages,
+        temperature: parseFloat(process.env.QWEN_TEMPERATURE || '0.7'),
+        max_tokens: 200
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Qwen API request failed with status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // 解析响应
+    return result.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('调用Qwen API生成引用失败:', error.message);
+    
+    // 降级到模拟AI引用
+    return generateFallbackAIQuote();
+  }
+}
+
+// 降级方案：模拟AI引用生成器（当API不可用时使用）
+function generateFallbackAIQuote() {
+  const quotes = [
+    "学习的本质是探索与成长，而非表演与完美。每一步回归真实兴趣的尝试，都是对过去扭曲学习模式的治愈。",
+    "真正的学习是内心驱动的探索，不是外界压力下的表演。",
+    "允许自己慢慢来，学习没有捷径，只有持续的积累。",
+    "学习的快乐来自于过程中的发现，而非最终的结果。",
+    "每一次尝试都是进步，每一次失败都是学习的机会。",
+    "不要为了别人的期待而学习，要为了自己的成长而努力。",
+    "学习是一场马拉松，不是短跑比赛。保持节奏，享受过程。",
+    "好奇心是最好的老师，保持对世界的探索欲望。"
+  ];
+  
+  return quotes[Math.floor(Math.random() * quotes.length)];
+}
 
 // 静态文件服务（可选，用于直接提供前端文件）
 app.use(express.static(__dirname));
