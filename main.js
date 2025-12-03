@@ -141,8 +141,11 @@ class DataManager {
         data.push(moodData);
         localStorage.setItem(APP_CONFIG.STORAGE_KEYS.MOOD_DATA, JSON.stringify(data));
         
-        // 同步到 Cloudflare KV
-        await APIClient.saveMoodData(moodData);
+        // 只有登录后才同步到后端
+        if (AuthManager.isLoggedIn()) {
+            // 同步到 Cloudflare KV
+            await APIClient.saveMoodData(moodData);
+        }
     }
 
     static getTaskData() {
@@ -154,8 +157,11 @@ class DataManager {
         // 保存到本地存储
         localStorage.setItem(APP_CONFIG.STORAGE_KEYS.TASK_DATA, JSON.stringify(taskData));
         
-        // 同步到 Cloudflare KV
-        await APIClient.saveTaskData(taskData);
+        // 只有登录后才同步到后端
+        if (AuthManager.isLoggedIn()) {
+            // 同步到 Cloudflare KV
+            await APIClient.saveTaskData(taskData);
+        }
     }
 
     static getAISuggestions() {
@@ -167,8 +173,11 @@ class DataManager {
         // 保存到本地存储
         localStorage.setItem(APP_CONFIG.STORAGE_KEYS.AI_SUGGESTIONS, JSON.stringify(suggestions));
         
-        // 同步到 Cloudflare KV
-        await APIClient.saveAISuggestion(suggestions[suggestions.length - 1]);
+        // 只有登录后才同步到后端
+        if (AuthManager.isLoggedIn()) {
+            // 同步到 Cloudflare KV
+            await APIClient.saveAISuggestion(suggestions[suggestions.length - 1]);
+        }
     }
 
     static getQuotes() {
@@ -252,12 +261,7 @@ class MindBloomApp {
     }
 
     async init() {
-        if (!AuthManager.isLoggedIn()) {
-            this.showLogin();
-            return;
-        }
-        
-        // 从 Cloudflare KV 同步数据
+        // 无论是否登录，都加载数据并显示
         await DataManager.syncFromCloud();
         
         this.setupEventListeners();
@@ -372,6 +376,12 @@ class MindBloomApp {
             settingsForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 
+                // 检查用户是否登录
+                if (!AuthManager.isLoggedIn()) {
+                    this.showLogin();
+                    return;
+                }
+                
                 const newUsername = document.getElementById('new-username').value;
                 const newPassword = document.getElementById('new-password').value;
                 const confirmPassword = document.getElementById('confirm-password').value;
@@ -400,13 +410,19 @@ class MindBloomApp {
             });
         }
         
-        // 退出登录按钮事件监听
+        // 退出登录按钮处理
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn) {
-            logoutBtn.addEventListener('click', () => {
-                AuthManager.logout();
-                location.reload();
-            });
+            // 只有已登录用户才能看到退出登录按钮
+            if (AuthManager.isLoggedIn()) {
+                logoutBtn.style.display = 'block';
+                logoutBtn.addEventListener('click', () => {
+                    AuthManager.logout();
+                    location.reload();
+                });
+            } else {
+                logoutBtn.style.display = 'none';
+            }
         }
     }
 
@@ -543,6 +559,12 @@ class MindBloomApp {
         
         // 保存状态
         saveBtn.addEventListener('click', async () => {
+            // 检查用户是否登录
+            if (!AuthManager.isLoggedIn()) {
+                this.showLogin();
+                return;
+            }
+            
             const anxietyValue = parseInt(anxietySlider.value);
             const joyValue = parseInt(joySlider.value);
             
@@ -582,7 +604,11 @@ class MindBloomApp {
             total: totalTasks,
             completionRate: completionRate
         };
-        DataManager.saveTaskData(taskData);
+        
+        // 检查用户是否登录
+        if (AuthManager.isLoggedIn()) {
+            DataManager.saveTaskData(taskData);
+        }
     }
 
     updateStreak() {
@@ -675,7 +701,7 @@ class MindBloomApp {
             if (result.success) {
                 const suggestion = result.suggestion;
                 
-                // 保存到本地存储
+                // 保存到本地存储（会自动处理后端同步）
                 await DataManager.saveAISuggestions([suggestion]);
                 
                 // 重新加载建议

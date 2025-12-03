@@ -7,6 +7,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const cron = require('node-cron');
+const bcrypt = require('bcryptjs');
 
 // 定时任务配置
 const scheduleTime = process.env.SCHEDULE_TIME || '23:00';
@@ -43,8 +44,9 @@ const pool = mysql.createPool({
 
 // 数据库迁移管理
 async function manageDatabaseSchema() {
+  let connection;
   try {
-    const connection = await pool.getConnection();
+    connection = await pool.getConnection();
     
     // 1. 创建版本表（用于跟踪数据库结构版本）
     await connection.execute(`
@@ -138,13 +140,14 @@ async function manageDatabaseSchema() {
       if (tableExists.length === 0) {
         // 表不存在，创建表
         await connection.execute(schema.sql);
-        console.log(`✅ 新建表: ${schema.name} (版本: ${schema.version})`);
+        console.log(`[${new Date().toISOString()}] ✅ 新建表: ${schema.name} (版本: ${schema.version})`);
         
         // 插入版本记录
         await connection.execute(
           `INSERT INTO schema_versions (table_name, version) VALUES (?, ?)`,
           [schema.name, schema.version]
         );
+        console.log(`[${new Date().toISOString()}] ✅ 为表 ${schema.name} 插入版本记录`);
       } else {
         // 表存在，检查版本
         const [versionResult] = await connection.execute(
@@ -158,12 +161,12 @@ async function manageDatabaseSchema() {
             `INSERT INTO schema_versions (table_name, version) VALUES (?, ?)`,
             [schema.name, schema.version]
           );
-          console.log(`✅ 为表 ${schema.name} 添加版本记录 (版本: ${schema.version})`);
+          console.log(`[${new Date().toISOString()}] ✅ 为表 ${schema.name} 添加版本记录 (版本: ${schema.version})`);
         } else {
           const currentVersion = versionResult[0].version;
           if (currentVersion < schema.version) {
             // 版本需要升级
-            console.log(`🔄 表 ${schema.name} 需要升级: ${currentVersion} -> ${schema.version}`);
+            console.log(`[${new Date().toISOString()}] 🔄 表 ${schema.name} 需要升级: ${currentVersion} -> ${schema.version}`);
             
             // 执行升级前备份表
             const backupTableName = `${schema.name}_backup_${Date.now()}`;
@@ -173,7 +176,7 @@ async function manageDatabaseSchema() {
             await connection.execute(
               `INSERT INTO ${backupTableName} SELECT * FROM ${schema.name}`
             );
-            console.log(`📦 已备份表 ${schema.name} 到 ${backupTableName}`);
+            console.log(`[${new Date().toISOString()}] 📦 已备份表 ${schema.name} 到 ${backupTableName}`);
             
             // 在这里添加具体的升级逻辑（根据不同表和版本）
             // 示例：如果是users表从版本1升级到2
@@ -186,66 +189,94 @@ async function manageDatabaseSchema() {
               `UPDATE schema_versions SET version = ? WHERE table_name = ?`,
               [schema.version, schema.name]
             );
-            console.log(`✅ 表 ${schema.name} 升级完成: ${currentVersion} -> ${schema.version}`);
+            console.log(`[${new Date().toISOString()}] ✅ 表 ${schema.name} 升级完成: ${currentVersion} -> ${schema.version}`);
           } else if (currentVersion === schema.version) {
-            console.log(`✅ 表 ${schema.name} 版本已最新 (版本: ${schema.version})`);
+            console.log(`[${new Date().toISOString()}] ✅ 表 ${schema.name} 版本已最新 (版本: ${schema.version})`);
           } else {
-            console.log(`⚠️  表 ${schema.name} 版本异常: 当前版本 ${currentVersion} 高于定义版本 ${schema.version}`);
+            console.log(`[${new Date().toISOString()}] ⚠️  表 ${schema.name} 版本异常: 当前版本 ${currentVersion} 高于定义版本 ${schema.version}`);
           }
         }
       }
       
-      // 4. 执行表结构优化（确保索引和约束正确）
-      console.log(`🔧 优化表结构: ${schema.name}`);
+      // 执行表结构优化（确保索引和约束正确）
+      console.log(`[${new Date().toISOString()}] 🔧 优化表结构: ${schema.name}`);
       await connection.execute(`OPTIMIZE TABLE ${schema.name}`);
     }
     
-    console.log('✅ 数据库表结构管理完成');
-    connection.release();
+    console.log(`[${new Date().toISOString()}] ✅ 数据库表结构管理完成`);
   } catch (error) {
-    console.error('❌ 数据库表结构管理失败:', error.message);
-    process.exit(1);
+    console.error(`[${new Date().toISOString()}] ❌ 数据库表结构管理失败:`, error.message);
+    console.error(`[${new Date().toISOString()}] ❌ 系统将以降级模式启动`);
+    // 不再直接调用process.exit(1)，允许系统以降级模式启动
+  } finally {
+    if (connection) {
+      connection.release();
+      console.log(`[${new Date().toISOString()}] 🔌 数据库连接已释放`);
+    }
   }
 }
 
 // 插入初始数据
 async function insertInitialData() {
+  let connection;
   try {
-    const connection = await pool.getConnection();
+    connection = await pool.getConnection();
     
-    // 检查是否已有用户数据
-    const [users] = await connection.execute('SELECT COUNT(*) as count FROM users');
-    if (users[0].count === 0) {
-      // 从环境变量读取默认用户名密码
-      const defaultUsername = process.env.DEFAULT_USERNAME || 'admin';
-      const defaultPassword = process.env.DEFAULT_PASSWORD || 'mindbloom2025';
+    // 开始事务
+    await connection.execute('START TRANSACTION');
+    
+    try {
+      // 检查是否已有用户数据
+      const [users] = await connection.execute('SELECT COUNT(*) as count FROM users');
+      if (users[0].count === 0) {
+        // 从环境变量读取默认用户名密码
+        const defaultUsername = process.env.DEFAULT_USERNAME || 'admin';
+        const defaultPassword = process.env.DEFAULT_PASSWORD || 'mindbloom2025';
+        
+        // 对密码进行哈希处理
+        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+        
+        // 插入默认用户
+        await connection.execute(
+          'INSERT INTO users (username, password) VALUES (?, ?)',
+          [defaultUsername, hashedPassword]
+        );
+        console.log(`[${new Date().toISOString()}] ✅ 默认用户已创建`);
+      }
       
-      // 插入默认用户
-      await connection.execute(
-        'INSERT INTO users (username, password) VALUES (?, ?)',
-        [defaultUsername, defaultPassword]
-      );
-      console.log('✅ 默认用户已创建');
+      // 检查是否已有引用数据
+      const [quotes] = await connection.execute('SELECT COUNT(*) as count FROM quotes');
+      if (quotes[0].count === 0) {
+        // 插入初始引用
+        await connection.execute(
+          'INSERT INTO quotes (text, date) VALUES (?, ?)',
+          [
+            '学习的本质是探索与成长，而非表演与完美。每一步回归真实兴趣的尝试，都是对过去扭曲学习模式的治愈。',
+            toMysqlDatetime(new Date().toISOString())
+          ]
+        );
+        console.log(`[${new Date().toISOString()}] ✅ 初始引用数据已创建`);
+      }
+      
+      // 提交事务
+      await connection.execute('COMMIT');
+      console.log(`[${new Date().toISOString()}] ✅ 初始数据插入完成`);
+    } catch (transactionError) {
+      // 回滚事务
+      await connection.execute('ROLLBACK');
+      console.error(`[${new Date().toISOString()}] ❌ 初始数据插入失败，事务已回滚:`, transactionError.message);
+      throw transactionError;
     }
     
-    // 检查是否已有引用数据
-    const [quotes] = await connection.execute('SELECT COUNT(*) as count FROM quotes');
-    if (quotes[0].count === 0) {
-      // 插入初始引用
-      await connection.execute(
-        'INSERT INTO quotes (text, date) VALUES (?, ?)',
-        [
-          '学习的本质是探索与成长，而非表演与完美。每一步回归真实兴趣的尝试，都是对过去扭曲学习模式的治愈。',
-          new Date().toISOString()
-        ]
-      );
-      console.log('✅ 初始引用数据已创建');
-    }
-    
-    connection.release();
   } catch (error) {
-    console.error('❌ 插入初始数据失败:', error.message);
-    process.exit(1);
+    console.error(`[${new Date().toISOString()}] ❌ 插入初始数据失败:`, error.message);
+    console.error(`[${new Date().toISOString()}] ❌ 系统将以降级模式启动`);
+    // 不再直接调用process.exit(1)，允许系统以降级模式启动
+  } finally {
+    if (connection) {
+      connection.release();
+      console.log(`[${new Date().toISOString()}] 🔌 数据库连接已释放`);
+    }
   }
 }
 
@@ -254,10 +285,11 @@ async function initDatabase() {
   try {
     await manageDatabaseSchema();
     await insertInitialData();
-    console.log('✅ 数据库初始化完成');
+    console.log(`[${new Date().toISOString()}] ✅ 数据库初始化完成`);
   } catch (error) {
-    console.error('❌ 数据库初始化失败:', error.message);
-    process.exit(1);
+    console.error(`[${new Date().toISOString()}] ❌ 数据库初始化失败:`, error.message);
+    console.error(`[${new Date().toISOString()}] ❌ 系统将以降级模式启动`);
+    // 不再直接调用process.exit(1)，允许系统以降级模式启动
   }
 }
 
@@ -269,11 +301,11 @@ initDatabase();
 // 获取所有数据
 app.get('/api/data', async (req, res) => {
   try {
-    // 获取所有数据
-    const [moodData] = await pool.execute('SELECT * FROM mood_data ORDER BY date DESC');
-    const [taskData] = await pool.execute('SELECT * FROM task_data');
-    const [aiSuggestions] = await pool.execute('SELECT * FROM ai_suggestions ORDER BY date DESC');
-    const [quotes] = await pool.execute('SELECT * FROM quotes ORDER BY date DESC');
+    // 获取所有数据，只选择需要的列
+    const [moodData] = await pool.execute('SELECT id, date, anxiety, joy, date_key FROM mood_data ORDER BY date DESC');
+    const [taskData] = await pool.execute('SELECT id, date, completed, total, completion_rate FROM task_data');
+    const [aiSuggestions] = await pool.execute('SELECT id, title, content, date, metrics FROM ai_suggestions ORDER BY date DESC');
+    const [quotes] = await pool.execute('SELECT id, text, date FROM quotes ORDER BY date DESC');
     
     // 转换taskData格式为对象
     const taskDataObj = {};
@@ -324,9 +356,11 @@ app.post('/api/data', async (req, res) => {
       // 保存情绪数据
       if (data.moodData && Array.isArray(data.moodData)) {
         for (const mood of data.moodData) {
+          // 转换前端发送的ISO日期格式为MySQL DATETIME格式
+          const mysqlDate = mood.date.replace('T', ' ').replace('Z', '');
           await connection.execute(
             'INSERT INTO mood_data (date, anxiety, joy, date_key) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE anxiety = VALUES(anxiety), joy = VALUES(joy)',
-            [mood.date, mood.anxiety, mood.joy, mood.date_key]
+            [mysqlDate, mood.anxiety, mood.joy, mood.date_key]
           );
         }
       }
@@ -354,9 +388,11 @@ app.post('/api/data', async (req, res) => {
       // 保存引用数据
       if (data.quotes && Array.isArray(data.quotes)) {
         for (const quote of data.quotes) {
+          // 转换前端发送的ISO日期格式为MySQL DATETIME格式
+          const mysqlDate = quote.date.replace('T', ' ').replace('Z', '');
           await connection.execute(
             'INSERT INTO quotes (text, date) VALUES (?, ?) ON DUPLICATE KEY UPDATE text = VALUES(text)',
-            [quote.text, quote.date]
+            [quote.text, mysqlDate]
           );
         }
       }
@@ -383,9 +419,11 @@ app.post('/api/mood', async (req, res) => {
   try {
     const moodData = req.body;
     
+    // 转换前端发送的ISO日期格式为MySQL DATETIME格式
+    const mysqlDate = moodData.date.replace('T', ' ').replace('Z', '');
     await pool.execute(
       'INSERT INTO mood_data (date, anxiety, joy, date_key) VALUES (?, ?, ?, ?)',
-      [moodData.date, moodData.anxiety, moodData.joy, moodData.date_key]
+      [mysqlDate, moodData.anxiety, moodData.joy, moodData.date_key]
     );
     
     res.json({ success: true });
@@ -454,9 +492,12 @@ app.put('/api/user', async (req, res) => {
       return res.status(400).json({ error: '用户名和密码不能为空' });
     }
     
+    // 对新密码进行哈希处理
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
     await pool.execute(
       'UPDATE users SET username = ?, password = ? WHERE id = 1',
-      [username, password]
+      [username, hashedPassword]
     );
     
     res.json({ success: true, message: '用户信息更新成功' });
@@ -471,16 +512,26 @@ app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     
+    // 先查询用户是否存在，获取哈希密码
     const [users] = await pool.execute(
-      'SELECT id, username FROM users WHERE username = ? AND password = ?',
-      [username, password]
+      'SELECT id, username, password FROM users WHERE username = ?',
+      [username]
     );
     
     if (users.length === 0) {
       return res.status(401).json({ success: false, error: '用户名或密码错误' });
     }
     
-    res.json({ success: true, user: users[0] });
+    // 使用bcrypt.compare验证密码
+    const user = users[0];
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({ success: false, error: '用户名或密码错误' });
+    }
+    
+    // 登录成功，返回用户信息（不包含密码）
+    res.json({ success: true, user: { id: user.id, username: user.username } });
   } catch (error) {
     console.error('登录验证失败:', error);
     res.status(500).json({ error: error.message });
@@ -491,8 +542,8 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/generate-ai-suggestion', async (req, res) => {
   try {
     // 获取用户数据
-    const [moodData] = await pool.execute('SELECT * FROM mood_data ORDER BY date DESC LIMIT 7');
-    const [taskData] = await pool.execute('SELECT * FROM task_data ORDER BY date DESC LIMIT 7');
+    const [moodData] = await pool.execute('SELECT anxiety, joy FROM mood_data ORDER BY date DESC LIMIT 7');
+    const [taskData] = await pool.execute('SELECT completed, total, completion_rate FROM task_data ORDER BY date DESC LIMIT 7');
     
     // 计算统计数据
     const stats = {
@@ -520,7 +571,7 @@ app.post('/api/generate-ai-suggestion', async (req, res) => {
       [
         suggestions.title,
         suggestions.content,
-        new Date().toISOString(),
+        toMysqlDatetime(new Date().toISOString()),
         JSON.stringify(stats)
       ]
     );
@@ -593,7 +644,7 @@ async function generateAISuggestions(stats) {
     return {
       title: "本周学习建议",
       content: content,
-      date: new Date().toISOString(),
+      date: toMysqlDatetime(new Date().toISOString()),
       metrics: stats
     };
   } catch (error) {
@@ -648,18 +699,18 @@ function generateFallbackAISuggestions(stats) {
   return {
     title: "本周学习建议",
     content: suggestions.join("\n\n"),
-    date: new Date().toISOString(),
+    date: toMysqlDatetime(new Date().toISOString()),
     metrics: stats
   };
 }
 
 // 定时任务：每日生成AI内容
 async function scheduledAIGeneration() {
-  console.log('⏰ 开始执行定时AI内容生成...');
+  console.log(`[${new Date().toISOString()}] ⏰ 开始执行定时AI内容生成...`);
   try {
     // 获取用户数据
-    const [moodData] = await pool.execute('SELECT * FROM mood_data ORDER BY date DESC LIMIT 7');
-    const [taskData] = await pool.execute('SELECT * FROM task_data ORDER BY date DESC LIMIT 7');
+    const [moodData] = await pool.execute('SELECT anxiety, joy FROM mood_data ORDER BY date DESC LIMIT 7');
+    const [taskData] = await pool.execute('SELECT completed, total, completion_rate FROM task_data ORDER BY date DESC LIMIT 7');
     
     // 计算统计数据
     const stats = {
@@ -692,20 +743,25 @@ async function scheduledAIGeneration() {
       ]
     );
     
-    console.log('✅ 定时AI内容生成完成！');
+    console.log(`[${new Date().toISOString()}] ✅ 定时AI内容生成完成！`);
   } catch (error) {
     console.error('❌ 定时AI内容生成失败:', error.message);
   }
 }
 
 // 设置定时任务
+// 封装日期转换函数，将ISO格式转换为MySQL DATETIME格式
+function toMysqlDatetime(isoDate) {
+  return isoDate.replace('T', ' ').replace('Z', '');
+}
+
 const cronSchedule = `${scheduleMinute} ${scheduleHour} * * *`; // 格式：分钟 小时 * * *
 cron.schedule(cronSchedule, () => {
-  console.log(`📅 触发定时任务: ${new Date().toISOString()}`);
+  console.log(`[${new Date().toISOString()}] 📅 触发定时任务`);
   scheduledAIGeneration();
 });
 
-console.log(`⏰ 定时任务已设置，每日 ${scheduleTime} 执行`);
+console.log(`[${new Date().toISOString()}] ⏰ 定时任务已设置，每日 ${scheduleTime} 执行`);
 
 // 手动触发AI内容生成API
 app.post('/api/generate-daily-ai', async (req, res) => {
