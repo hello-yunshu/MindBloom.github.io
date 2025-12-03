@@ -8,8 +8,14 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const cron = require('node-cron');
 const bcrypt = require('bcryptjs');
-// 导入node-fetch用于API调用
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+// 导入OpenAI包用于API调用
+const OpenAI = require('openai');
+
+// 配置OpenAI客户端（用于调用Qwen API）
+const openai = new OpenAI({
+  apiKey: process.env.QWEN_API_KEY,
+  baseURL: process.env.QWEN_API_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+});
 
 // 定时任务配置
 const scheduleTime = process.env.SCHEDULE_TIME || '23:00';
@@ -592,7 +598,9 @@ async function generateAISuggestions(stats) {
     const messages = [
       {
         role: 'system',
-        content: '你是一个专业的学习心理顾问，专注于帮助用户建立健康的学习习惯和积极的学习心态。'
+        content: `你是一个专业的学习心理顾问，专注于帮助用户建立健康的学习习惯和积极的学习心态。
+        你需要基于用户的情绪数据和任务完成情况，生成个性化、实用的学习建议。
+        建议要具体、可操作，避免空泛的理论，要符合"学习心理建设指南"的定位。`
       },
       {
         role: 'user',
@@ -607,37 +615,26 @@ async function generateAISuggestions(stats) {
         
         建议要求：
         1. 标题统一为"本周学习建议"
-        2. 建议内容要具体、实用，有针对性
-        3. 涵盖学习方法、情绪管理、时间安排等方面
+        2. 建议内容要具体、实用，有针对性，要直接针对用户的焦虑程度、愉悦程度和任务完成率给出具体改进建议
+        3. 涵盖学习方法、情绪管理、时间安排等方面，每个方面给出1-2条具体建议
         4. 语言要友好、鼓励，符合"学习心理建设指南"的定位
-        5. 建议长度适中，不要太长
+        5. 建议长度适中，控制在300-500字
         6. 避免使用专业术语，保持通俗易懂
+        7. 建议要可操作，给出明确的行动步骤，而不是空泛的理论
+        8. 针对不同数据情况给出差异化建议，比如高焦虑用户给出更多情绪管理建议，低完成率用户给出更多时间管理建议
         
         请直接生成建议内容，不需要任何引言或解释。
         `
       }
     ];
     
-    // 调用Qwen API
-    const response = await fetch(`${process.env.QWEN_API_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.QWEN_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: process.env.QWEN_MODEL || 'qwen3-max-preview',
-        messages: messages,
-        temperature: parseFloat(process.env.QWEN_TEMPERATURE || '0.7'),
-        max_tokens: 500
-      })
+    // 调用Qwen API（使用OpenAI客户端）
+    const result = await openai.chat.completions.create({
+      model: process.env.QWEN_MODEL || 'qwen3-max-preview',
+      messages: messages,
+      temperature: parseFloat(process.env.QWEN_TEMPERATURE || '0.7'),
+      max_tokens: 500
     });
-    
-    if (!response.ok) {
-      throw new Error(`Qwen API request failed with status: ${response.status}`);
-    }
-    
-    const result = await response.json();
     
     // 解析响应
     const content = result.choices[0].message.content.trim();
@@ -820,7 +817,9 @@ async function generateAIQuote(stats) {
     const messages = [
       {
         role: 'system',
-        content: '你是一个专业的学习心理顾问，专注于帮助用户建立健康的学习习惯和积极的学习心态。'
+        content: `你是一个专业的学习心理顾问，专注于帮助用户建立健康的学习习惯和积极的学习心态。
+        你需要基于用户的情绪数据，生成一句简洁、富有启发性的引言，帮助用户调整学习心态，建立积极的学习习惯。
+        引言要温暖、鼓励，符合"学习心理建设指南"的定位，能够触动用户的内心。`
       },
       {
         role: 'user',
@@ -833,36 +832,27 @@ async function generateAIQuote(stats) {
         - 数据追踪天数：${stats.daysTracked}天
         
         引言要求：
-        1. 简洁有力，不超过100字
-        2. 富有启发性和鼓励性
-        3. 符合"学习心理建设指南"的定位
-        4. 语言温暖、积极，容易理解
-        5. 不要使用专业术语
+        1. 简洁有力，控制在50-80字之间
+        2. 富有启发性和鼓励性，能够触动用户内心
+        3. 符合"学习心理建设指南"的定位，专注于学习心态建设
+        4. 语言温暖、积极，容易理解，避免说教
+        5. 不要使用专业术语，保持通俗易懂
         6. 直接生成引言内容，不需要任何引言或解释
+        7. 根据用户的焦虑程度和愉悦程度调整引言的语气和重点，比如高焦虑用户需要更多安抚，低愉悦用户需要更多鼓励
+        8. 引言要具有普适性，能够适用于不同的学习场景
+        
+        请直接生成引言内容，不需要任何引言或解释。
         `
       }
     ];
     
-    // 调用Qwen API
-    const response = await fetch(`${process.env.QWEN_API_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.QWEN_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: process.env.QWEN_MODEL || 'qwen3-max-preview',
-        messages: messages,
-        temperature: parseFloat(process.env.QWEN_TEMPERATURE || '0.7'),
-        max_tokens: 200
-      })
+    // 调用Qwen API（使用OpenAI客户端）
+    const result = await openai.chat.completions.create({
+      model: process.env.QWEN_MODEL || 'qwen3-max-preview',
+      messages: messages,
+      temperature: parseFloat(process.env.QWEN_TEMPERATURE || '0.7'),
+      max_tokens: 200
     });
-    
-    if (!response.ok) {
-      throw new Error(`Qwen API request failed with status: ${response.status}`);
-    }
-    
-    const result = await response.json();
     
     // 解析响应
     return result.choices[0].message.content.trim();
