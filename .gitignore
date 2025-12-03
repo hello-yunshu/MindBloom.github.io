@@ -1,0 +1,91 @@
+# MindBloom .gitignore
+
+# Node.js dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Database backups
+*.sql
+*.sql.gz
+*.bak
+*.backup
+
+# AI generated files
+generated_ai_content/
+
+# Local development files
+.local/
+.dev/
+
+# Security related files
+*.pem
+*.key
+*.crt
+*.csr
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+lerna.json
+
+# Testing files
+*.test.js
+*.spec.js
+jest.config.js
+
+# TypeScript files
+typeScript/
+*.tsbuildinfo
+
+# Other temporary files
+.env.example
+.env.sample
+.env.template
